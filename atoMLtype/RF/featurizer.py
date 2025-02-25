@@ -21,12 +21,13 @@ class AtomFeaturizer_RF(MolecularFeaturizer):
     Extracts per-atom features from RDKit molecules.
     """
 
-    def featurize(self, molecule, apply_scaling=False) -> pd.DataFrame:
+    def featurize(self, molecule, apply_scaling=False, include_neighborhood=True) -> pd.DataFrame:
         """Generates per-atom feature vectors from an RDKit molecule.
         
         Args:
             molecule (rdkit.Chem.Mol): RDKit molecule object.
             apply_scaling (bool): If True, applies StandardScaler normalization.
+            include_neighborhood (bool): If False, excludes features related to atom neighborhood.
 
         Returns:
             pd.DataFrame: Feature matrix (scaled if apply_scaling=True).
@@ -54,43 +55,58 @@ class AtomFeaturizer_RF(MolecularFeaturizer):
         distances = np.linalg.norm(pos[:, None, :] - pos[None, :, :], axis=-1)
 
         for atom in molecule.GetAtoms():
-            # Get relative distance of atom to center of mass
+            # Get atom index
             atom_idx = atom.GetIdx()
-            dist_to_com = np.linalg.norm(pos[atom_idx] - center_of_mass)
 
             # One-hot encode hybridization
             hybridization = atom.GetHybridization()
             hybridization_encoded = hybridization_map.get(hybridization, [0, 0, 0, 0, 0, 1])
 
-            # Compute nearest neighbor distances (excluding self-distance)
-            sorted_distances = np.sort(distances[atom_idx, :])  # Sort distances
-            non_self_distances = sorted_distances[sorted_distances > 0]  # Exclude 0 (self-distance)
+            # Compute neighborhood-based features
+            neighborhood_features = []
+            if include_neighborhood:
+                # Get relative distance of atom to center of mass
+                dist_to_com = np.linalg.norm(pos[atom_idx] - center_of_mass)
+                # Compute nearest neighbor distances (excluding self-distance)
+                sorted_distances = np.sort(distances[atom_idx, :])  # Sort distances
+                non_self_distances = sorted_distances[sorted_distances > 0]  # Exclude 0 (self-distance)
 
-            # Handle case where atom has fewer than 3 neighbors
-            if len(non_self_distances) >= 3:
-                mean_k3_dist = np.mean(non_self_distances[:3])
-            elif len(non_self_distances) > 0:
-                mean_k3_dist = np.mean(non_self_distances)  # If fewer than 3, take mean of available
-            else:
-                mean_k3_dist = 0  # If no neighbors exist (isolated atom), set to 0
+                # Handle case where atom has fewer than 3 neighbors
+                if len(non_self_distances) >= 3:
+                    mean_k3_dist = np.mean(non_self_distances[:3])
+                elif len(non_self_distances) > 0:
+                    mean_k3_dist = np.mean(non_self_distances)  # If fewer than 3, take mean of available
+                else:
+                    mean_k3_dist = 0  # If no neighbors exist (isolated atom), set to 0
 
-            min_dist = non_self_distances[0] if len(non_self_distances) > 0 else 0  # Handle isolated atoms
+                min_dist = non_self_distances[0] if len(non_self_distances) > 0 else 0  # Handle isolated atoms
+                
+                neighborhood_features = [dist_to_com, mean_k3_dist, min_dist]
 
-            features.append([
+
+            base_features = [
                 atom.GetAtomicNum(),  # Atomic number
                 atom.GetFormalCharge(),  # Formal charge
                 atom.GetTotalNumHs(),  # Number of implicit hydrogens
                 int(atom.GetIsAromatic()),  # Aromaticity (binary)
                 atom.GetDegree(),  # Degree (number of bonded neighbors)
-                dist_to_com,  # Distance to center of mass
-                mean_k3_dist,  # Mean distance to 3 nearest neighbors
-                min_dist,  # Closest neighbor distance
-            ] + hybridization_encoded)
+            ]
 
-        # Updated column names to match the number of features
-        column_names = ["AtomicNum", "FormalCharge", "NumHs", "Aromaticity",
-                        "Degree", "DistToCenterOfMass", "MeanDistK3", "MinDist",
-                        "SP", "SP2", "SP3", "SP3D", "SP3D2", "OtherHybrid"]
+            if include_neighborhood:
+                neighborhood_features = [dist_to_com,  # Distance to center of mass
+                                        mean_k3_dist,  # Mean distance to 3 nearest neighbors
+                                        min_dist] # Closest neighbor distance
+            else: neighborhood_features = []
+
+            features.append(base_features + neighborhood_features + hybridization_encoded)
+
+
+        # Define column names dynamically based on whether neighborhood features are included
+        base_columns = ["AtomicNum", "FormalCharge", "NumHs", "Aromaticity", "Degree"]
+        neighborhood_columns = ["DistToCenterOfMass", "MeanDistK3", "MinDist"] if include_neighborhood else []
+        hybridization_columns = ["SP", "SP2", "SP3", "SP3D", "SP3D2", "OtherHybrid"]
+        
+        column_names = base_columns + neighborhood_columns + hybridization_columns
         
         # Build pandas df with features and columns
         df = pd.DataFrame(features, columns=column_names)

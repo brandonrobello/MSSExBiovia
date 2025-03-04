@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torch_geometric.loader import DataLoader
 from sklearn.metrics import accuracy_score, f1_score
-from atoMLtype.RF.metrics import plot_full_confusion_matrix
 
 
 class BaselineGNN(nn.Module):

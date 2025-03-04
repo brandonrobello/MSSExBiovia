@@ -5,8 +5,8 @@ from rdkit import Chem
 from torch_geometric.loader import DataLoader
 from sklearn.preprocessing import LabelEncoder
 from typing import List
-from atoMLtype.RF.dataset import SDFdataset
-from atoMLtype.RF.featurizer import GraphFeaturizer
+from atoMLtype.utils.SDFdataset import SDFdataset
+from atoMLtype.GNN.GNNfeaturizer import GraphFeaturizer
 
 
 class GNNdataset(Dataset):
@@ -60,7 +60,7 @@ class GNNdataset(Dataset):
         """
         Converts an RDKit molecule into a PyTorch Geometric graph.
         """
-        atom_features, edge_indices, bond_features = self.featurizer.featurize_molecule(mol)
+        atom_features, edge_indices, bond_features = self.featurizer.featurize(mol)
 
         # Convert to PyTorch tensors
         x = torch.tensor(atom_features, dtype=torch.float)  # Shape: [num_atoms, feature_dim]

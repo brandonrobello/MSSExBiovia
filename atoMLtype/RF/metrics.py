@@ -179,6 +179,26 @@ def compute_confusion_matrix(y_true: List[str], y_pred: List[str]):
     Returns:
         pd.DataFrame: A DataFrame containing the confusion matrix.
     """
+<<<<<<< HEAD
+=======
+
+        # Flatten lists if they contain nested lists
+    if isinstance(y_true[0], list): 
+        y_true = sum(y_true, [])
+    if isinstance(y_pred[0], list):
+        y_pred = sum(y_pred, [])
+
+    # Convert NumPy arrays to lists of integers (if not already lists)
+    if isinstance(y_true, np.ndarray):
+        y_true = y_true.tolist()
+    if isinstance(y_pred, np.ndarray):
+        y_pred = y_pred.tolist()
+
+    # Flatten lists (handles cases where labels are stored as nested lists)
+    y_true = [int(item) if isinstance(item, (list, np.ndarray)) else item for item in y_true]
+    y_pred = [int(item) if isinstance(item, (list, np.ndarray)) else item for item in y_pred]
+
+>>>>>>> b80bc37 (GNN CODE: Implementations for GNN Dev and testing)
     all_atom_types = sorted(set(y_true) | set(y_pred))
     confusion_matrix = pd.DataFrame(0, index=all_atom_types, columns=all_atom_types, dtype=float)
 

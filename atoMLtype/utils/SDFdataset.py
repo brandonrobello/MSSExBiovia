@@ -6,8 +6,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
 from rdkit import Chem
 
-
-
 class BaseDataset(ABC):
     """
     Abstract base class for molecular datasets.

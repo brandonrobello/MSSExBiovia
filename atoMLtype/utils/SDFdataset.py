@@ -307,3 +307,47 @@ class SDFdataset(BaseDataset):
             sdfAtOrd_data.append(atom_order)
 
         return sdfName_data, sdfAtOrd_data
+    
+
+class ESPdataset(BaseDataset):
+    """
+    Class to organize SDF files and atom type labels for featurization.
+    
+    - Loads SDF files
+    - Extracts molecular structures
+    - Processes atom ordering and atom type labels for ML pipelines
+
+    Attributes:
+        data_source (str): Path to the SDF file.
+        json_path (str): Path to the JSON file containing atom labels.
+        molecules (List[Chem.Mol]): List of RDKit molecule objects.
+        molNames (List[str]): List of molecule names.
+        atoms (List[List[int]]): Atom indices, continuous across molecules.
+        atom_labels (List[List[str]]): List of atom type labels for each molecule.
+    """
+    def __init__(self, data_source: str, label_source: str = None):
+        self.data_source = data_source
+        self.label_source = label_source
+        self.log = logging.getLogger(__name__)
+        self.log.setLevel(logging.INFO)
+
+        # SDF Processing and Ordering
+        self.molecules = self._load_molecules()
+        self.molNames, self.atoms = self._parse_atoms()
+
+        # AT Label Processing and Ordering
+        if label_source:
+            self.label_dict = self._load_labels(label_source)
+            self.Y_labels = self._map_labels()
+            self.X_molecules = self._filter_molecules()
+        else:
+            self.label_dict = None
+            self.Y_labels = None
+            self.X_molecules = None
+
+        # Check if molecule names match the number of valid molecules
+        assert len(self.molNames) == len(self.molecules), (
+            f"Mismatch: {len(self.molNames)} names, but {len(self.molecules)} molecules."
+        )
+
+        self.log.info(f"Successfully parsed {len(self.molecules)} molecules with valid names.")

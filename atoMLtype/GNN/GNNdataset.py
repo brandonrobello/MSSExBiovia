@@ -39,22 +39,25 @@ class GNNdataset(Dataset):
         self.label_encoder.fit(self.all_labels)  # Learn the mapping
         
         # Process molecules into PyG graph format
-        self.mol_graphs = self._process_molecules()
+        self.mol_graphs, self.mol_names = self._process_molecules()
+        
 
     def _process_molecules(self) -> List[Data]:
         """
         Converts X_molecules filtered molecules into PyTorch Geometric graph objects.
         """
         mol_graphs = []
+        mol_names = []
 
         for mol_name, mol in self.sdf_dataset.X_molecules.items():
             try:
                 graph = self.mol_to_graph(mol, mol_name)
                 mol_graphs.append(graph)
+                mol_names.append(mol_name)
             except Exception as e:
                 print(f"Skipping molecule {mol_name} due to error: {e}")
 
-        return mol_graphs
+        return mol_graphs, mol_names
 
     def mol_to_graph(self, mol, mol_name):
         """

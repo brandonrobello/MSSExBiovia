@@ -28,7 +28,7 @@ class GraphFeaturizer(atoMLtype_featurizer):
             - edge_indices: (2, num_edges)
             - bond_features: (num_edges, bond_feature_dim)
         """
-        atom_features = [self.get_atom_features(atom) for atom in molecule.GetAtoms()]
+        atom_features = [self.get_atom_features(atom, molecule) for atom in molecule.GetAtoms()]
         bond_features = []
         edge_indices = []
 
@@ -45,7 +45,7 @@ class GraphFeaturizer(atoMLtype_featurizer):
             np.array(bond_features, dtype=np.float32)
 
 
-    def get_atom_features(self, atom):
+    def get_atom_features(self, atom, molecule):
         """Extract features for an atom in an RDKit molecule."""
         atom_type = self.one_hot_encode(atom.GetAtomicNum(), list(range(1, 101)))
         degree = self.one_hot_encode(atom.GetDegree(), list(range(12)))
@@ -60,9 +60,16 @@ class GraphFeaturizer(atoMLtype_featurizer):
         aromaticity = [int(atom.GetIsAromatic())]
         radical_electrons = self.one_hot_encode(atom.GetNumRadicalElectrons(), list(range(6)))
         hybridization = self.hybridization_map.get(atom.GetHybridization(), [0, 0, 0, 0, 0, 1])  # Use map
+        # --------Added--------
+        # Determine smallest ring size ## NEED MORE EFFICIENT METHOD
+        rings = Chem.GetSymmSSSR(molecule)
+        ring_sizes = [len(ring) for ring in rings if atom.GetIdx() in ring]
+        smallest_ring_size = min(ring_sizes) if ring_sizes else 0
+        ring_size_encoding = self.one_hot_encode(smallest_ring_size, list(range(10)))
         
         return np.array(atom_type + degree + formal_charge + chiral_center + chirality_type + 
-                        num_h + atomic_mass + aromaticity + radical_electrons + hybridization, dtype=np.float32)
+                        num_h + atomic_mass + aromaticity + radical_electrons + hybridization + 
+                        ring_size_encoding, dtype=np.float32)
 
     def get_bond_features(self, bond):
         """Extract features for a bond in an RDKit molecule."""
@@ -94,6 +101,15 @@ class GraphFeaturizer(atoMLtype_featurizer):
 
     @staticmethod
     def one_hot_encode(value, choices):
-        """One-hot encode a value given a list of choices."""
-        encoding = [1 if value == choice else 0 for choice in choices]
+        """One-hot encode a value given a list of choices.
+        
+        If the value is greater than the maximum in choices, the last choice is set to 1.
+        """
+        encoding = [0] * (len(choices)+1)
+        
+        if value in choices:
+            encoding[choices.index(value)] = 1  # Standard one-hot encoding
+        else:
+            encoding[-1] = 1  # Assign to last index if value > max(choices)
+        
         return encoding

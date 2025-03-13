@@ -1,3 +1,6 @@
+# DS_store
+.DS_store
+
 # Skipped_molecules log files
 skipped_molecules*.json
 

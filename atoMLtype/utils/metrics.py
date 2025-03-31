@@ -167,17 +167,17 @@ def plot_atom_distribution(y_labels, order=DEFAULT_CATEGORIES, plot=True):
 
     return atom_type_df
 
-# Compute Confusion Matrix
-def compute_confusion_matrix(y_true: List[str], y_pred: List[str]):
+# Compute heatmap matrix
+def compute_heatmap_matrix(y_true: List[str], y_pred: List[str]):
     """
-    Computes the full confusion matrix for atom types.
+    Computes the full Heatmap matrix for atom types.
     
     Args:
         y_true: List of true atom types.
         y_pred: List of predicted atom types.
     
     Returns:
-        pd.DataFrame: A DataFrame containing the confusion matrix.
+        pd.DataFrame: A DataFrame containing the Heatmap matrix.
     """
 
         # Flatten lists if they contain nested lists
@@ -197,24 +197,24 @@ def compute_confusion_matrix(y_true: List[str], y_pred: List[str]):
     y_pred = [int(item) if isinstance(item, (list, np.ndarray)) else item for item in y_pred]
 
     all_atom_types = sorted(set(y_true) | set(y_pred))
-    confusion_matrix = pd.DataFrame(0, index=all_atom_types, columns=all_atom_types, dtype=float)
+    heatmap_matrix = pd.DataFrame(0, index=all_atom_types, columns=all_atom_types, dtype=float)
 
     for true_label, pred_label in zip(y_true, y_pred):
-        confusion_matrix.loc[true_label, pred_label] += 1
+        heatmap_matrix.loc[true_label, pred_label] += 1
 
     # Normalize matrix
-    row_sums = confusion_matrix.sum(axis=1).replace(0, 1)  # Avoid division by zero
-    normalized_matrix = confusion_matrix.div(row_sums, axis=0) * 100
+    row_sums = heatmap_matrix.sum(axis=1).replace(0, 1)  # Avoid division by zero
+    normalized_matrix = heatmap_matrix.div(row_sums, axis=0) * 100
 
     return normalized_matrix
 
 # Function to plot a heatmap
 def plot_heatmap(matrix, title, xlabel="Reference Types", ylabel="Predicted Types", cmap="BuPu", figsize=(12, 10), annot=False):
     """
-    Plots a heatmap for a given confusion matrix.
+    Plots a heatmap for a given Heatmap matrix.
 
     Args:
-        matrix (pd.DataFrame): Confusion matrix data.
+        matrix (pd.DataFrame): Heatmap matrix data.
         title (str): Title of the heatmap.
         xlabel (str): X-axis label.
         ylabel (str): Y-axis label.
@@ -243,12 +243,12 @@ def plot_heatmap(matrix, title, xlabel="Reference Types", ylabel="Predicted Type
     plt.yticks(rotation=0)
     plt.show()
 
-# Plot Full Confusion Matrix
-def plot_full_confusion_matrix(y_true, y_pred, annot=False):
+# Plot Full Heatmap Matrix
+def plot_full_heatmap(y_true, y_pred, annot=False):
     """
-    Generates a full confusion matrix heatmap for atom types.
+    Generates a full heatmap for atom types.
     """
-    normalized_matrix = compute_confusion_matrix(y_true, y_pred)
+    normalized_matrix = compute_heatmap_matrix(y_true, y_pred)
     
     total_atoms = len(y_true)
     total_misclassified = sum(t != p for t, p in zip(y_true, y_pred))
@@ -256,17 +256,17 @@ def plot_full_confusion_matrix(y_true, y_pred, annot=False):
     # Compute misclassification Rate
     overall_misclassification_rate = (total_misclassified / total_atoms) * 100
 
-    title = f"Confusion Matrix for All Atom Types\n\
+    title = f"Heatmap Matrix for All Atom Types\n\
         Total Atoms: {total_atoms} | Total Misclassified: {total_misclassified} ({overall_misclassification_rate:.2f}%)"
 
     plot_heatmap(normalized_matrix, title, annot)
 
-# Plot Category-Based Confusion Matrices
-def plot_category_confusion_matrix(y_true, y_pred, categories=DEFAULT_CATEGORIES, annot=True):
+# Plot Category-Based Heatmap
+def plot_category_heatmap(y_true, y_pred, categories=DEFAULT_CATEGORIES, annot=True):
     """
-    Generates category-based confusion matrix heatmaps.
+    Generates category-based Heatmap matrix heatmaps.
     """
-    normalized_matrix = compute_confusion_matrix(y_true, y_pred)
+    normalized_matrix = compute_heatmap_matrix(y_true, y_pred)
     all_atom_types = sorted(set(y_true) | set(y_pred))
 
     for category in categories:
@@ -284,14 +284,14 @@ def plot_category_confusion_matrix(y_true, y_pred, categories=DEFAULT_CATEGORIES
         # Compute misclassification Rate
         overall_misclassification_rate = (misclassified_in_category / total_category_atoms) * 100
 
-        title = f"Confusion Matrix for {category} Atom Types\n\
+        title = f"Heatmap Matrix for {category} Atom Types\n\
             Total {category} Atoms: {total_category_atoms} | Total Misclassified: {misclassified_in_category} ({overall_misclassification_rate:.2f}%)"
 
         plot_heatmap(category_matrix, title, annot=annot)
 
 
-# Plot Cross-Category Confusion Matrix
-def plot_detailed_cross_category_confusion(y_true, y_pred, categories=DEFAULT_CATEGORIES, annot=True):
+# Plot Cross-Category Heatmap
+def plot_detailed_cross_category_heatmap(y_true, y_pred, categories=DEFAULT_CATEGORIES, annot=True):
     """
     Generates a heatmap showing only the cross-category misclassified atom types.
     The title includes misclassification statistics.
@@ -306,7 +306,7 @@ def plot_detailed_cross_category_confusion(y_true, y_pred, categories=DEFAULT_CA
         None (Displays heatmap).
     """
     # Compute Misclassification Matrix (Atom-level across categories)
-    cross_category_conf_matrix = pd.DataFrame(0, index=list(set(y_true)), columns=list(set(y_pred)), dtype=float)
+    cross_category_heat_matrix = pd.DataFrame(0, index=list(set(y_true)), columns=list(set(y_pred)), dtype=float)
     
     total_misclassified = 0
     total_atoms = len(y_true)  # Total instances
@@ -316,20 +316,20 @@ def plot_detailed_cross_category_confusion(y_true, y_pred, categories=DEFAULT_CA
         pred_category = categorize_atom_type(pred_label)
 
         if true_category != pred_category:  # Only count cross-category misclassifications
-            cross_category_conf_matrix.loc[true_label, pred_label] += 1
+            cross_category_heat_matrix.loc[true_label, pred_label] += 1
             total_misclassified += 1
 
     # Normalize by total occurrences of each atom type
     atom_type_totals = Counter(y_true)
-    for atom in cross_category_conf_matrix.index:
+    for atom in cross_category_heat_matrix.index:
         if atom in atom_type_totals and atom_type_totals[atom] > 0:
-            cross_category_conf_matrix.loc[atom] = (
-                cross_category_conf_matrix.loc[atom] / atom_type_totals[atom] * 100
+            cross_category_heat_matrix.loc[atom] = (
+                cross_category_heat_matrix.loc[atom] / atom_type_totals[atom] * 100
             )
 
     # Remove rows and columns with only zeros (no misclassifications)
-    cross_category_conf_matrix = cross_category_conf_matrix.loc[(cross_category_conf_matrix.sum(axis=1) > 0), :]
-    cross_category_conf_matrix = cross_category_conf_matrix.loc[:, (cross_category_conf_matrix.sum(axis=0) > 0)]
+    cross_category_heat_matrix = cross_category_heat_matrix.loc[(cross_category_heat_matrix.sum(axis=1) > 0), :]
+    cross_category_heat_matrix = cross_category_heat_matrix.loc[:, (cross_category_heat_matrix.sum(axis=0) > 0)]
 
     # Compute Overall Misclassification Rate
     overall_misclassification_rate = (total_misclassified / total_atoms) * 100
@@ -339,12 +339,149 @@ def plot_detailed_cross_category_confusion(y_true, y_pred, categories=DEFAULT_CA
         Total Atoms: {total_atoms} | Misclassified: {total_misclassified} ({overall_misclassification_rate:.2f}%)"
 
     # Plot Heatmap (Only if there are misclassifications)
-    if not cross_category_conf_matrix.empty:
+    if not cross_category_heat_matrix.empty:
         plot_heatmap(
-            cross_category_conf_matrix, 
+            cross_category_heat_matrix, 
             heatmap_title, 
             cmap="OrRd", 
             annot=annot
         )
     else:
         print("No cross-category misclassifications found!")
+
+# Plot Confusion matrices of mismatched classifications
+def plot_confusion_matrix_nonzero_only(data, title, cmap="Blues", annot=True, true_label_counts=None):
+    """
+    Plots a confusion matrix of mismatches using absolute misclassification counts.
+    True labels are shown on the x-axis, predicted labels on the y-axis.
+    Annotates cells with raw values. Appends total true counts to x-axis labels.
+
+    Args:
+        data (list[tuple]): List of (true, predicted) atom type mismatches.
+        title (str): Title of the plot.
+        cmap (str): Seaborn color map.
+        annot (bool): Whether to annotate the heatmap.
+        true_label_counts (dict): Mapping of true labels to their total counts for display only.
+
+    Returns:
+        None (Displays heatmap).
+    """
+
+    df = pd.DataFrame(data, columns=["True", "Predicted"])
+    conf_matrix = pd.crosstab(df["Predicted"], df["True"])
+
+    # Annotate as percentages (only non-zero)
+    annot_matrix = conf_matrix.round(1).astype(str)
+    annot_matrix[conf_matrix == 0] = ""
+
+    # Append total counts to x-axis labels
+    new_columns = [f"{col}\n(n={true_label_counts.get(col, 0)})" for col in conf_matrix.columns]
+    conf_matrix.columns = new_columns
+    annot_matrix.columns = new_columns
+
+    # Mask zeros
+    mask = conf_matrix == 0
+
+    # Plot
+    plt.figure(figsize=(max(12, 0.5 * conf_matrix.shape[1]), max(10, 0.5 * conf_matrix.shape[0])))
+    sns.heatmap(conf_matrix, mask=mask, annot=annot_matrix if annot else False,
+                fmt="", cmap=cmap, cbar_kws={"label": "Percentage"})
+    plt.title(title)
+    plt.xlabel("True Atom Type (with counts)")
+    plt.ylabel("Predicted Atom Type")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.show()        
+
+
+
+def plot_full_cross_intra_confusion_matices(y_true, y_pred, categories=DEFAULT_CATEGORIES,\
+                                             normalize=False, annot=True):
+    """
+    Generates two confusion matrices:
+    1. Cross-category mismatches (True category ≠ Predicted category)
+    2. Intra-category mismatches (True category == Predicted category)
+
+    Args:
+        y_true (list of str): True labels.
+        y_pred (list of str): Predicted labels.
+        categories (set): Set of known atom categories.
+        normalize (bool): Whether to normalize by row totals.
+        annot (bool): Whether to annotate cells.
+
+    Returns:
+        None. Displays two seaborn heatmaps.
+    """
+
+    # Build array of (true, pred) pairs
+    pairs = np.array(list(zip(y_true, y_pred)))
+
+    # Split into matches and mismatches
+    mismatches = pairs[pairs[:, 0] != pairs[:, 1]]
+
+    # Identify cross-category mismatches
+    first_cat = np.array([label[0] for label in mismatches[:, 0]])
+    second_cat = np.array([label[0]for label in mismatches[:, 1]])
+    cross_cat_mask = first_cat != second_cat
+
+    crossCat_mismatches = mismatches[cross_cat_mask]
+    interCat_mismatches = mismatches[~cross_cat_mask]
+
+    # Count the true label
+    true_label_counts = Counter(y_true)
+
+    if len(crossCat_mismatches) > 0:
+        plot_confusion_matrix_nonzero_only(crossCat_mismatches, \
+                                           "Cross-Category Confusion Matrix (Non-Zero Only)", cmap="OrRd", \
+                                            true_label_counts=true_label_counts)
+    else:
+        print("No cross-category mismatches found.")
+
+    if len(interCat_mismatches) > 0:
+        plot_confusion_matrix_nonzero_only(interCat_mismatches, \
+                                           "Intra-Category Confusion Matrix (Non-Zero Only)", cmap="BuPu", \
+                                            true_label_counts=true_label_counts)
+    else:
+        print("No intra-category mismatches found.")
+
+
+def plot_category_confusion_matrices(y_true, y_pred, categories=DEFAULT_CATEGORIES, annot=True):
+    """
+    Generates confusion matrices for each category based on mismatched classifications
+    within that category (intra-category only).
+
+    Args:
+        y_true (list): True atom type labels.
+        y_pred (list): Predicted atom type labels.
+        categories (set): Atom type categories.
+        annot (bool): Whether to annotate heatmap cells.
+
+    Returns:
+        None (Displays per-category confusion matrices).
+    """
+
+    pairs = np.array(list(zip(y_true, y_pred)))
+    mismatches = pairs[pairs[:, 0] != pairs[:, 1]]
+
+    # Count full label distribution from y_true
+    full_true_label_counts = Counter(y_true)
+
+    all_atom_types = sorted(set(y_true) | set(y_pred))
+
+    for category in categories:
+        # Get atom types in this category
+        category_atom_types = [label for label in all_atom_types if categorize_atom_type(label) == category]
+
+        # Filter mismatches where both true and predicted are in this category
+        category_mismatches = [pair for pair in mismatches 
+                               if pair[0] in category_atom_types and pair[1] in category_atom_types]
+
+        if not category_mismatches:
+            continue
+
+        category_true_label_counts = {label: full_true_label_counts[label] for label in category_atom_types}
+
+        title = f"{category} Category Confusion Matrix (Intra-Category Only)\n"
+
+        plot_confusion_matrix_nonzero_only(category_mismatches, title=title, cmap="YlGnBu", annot=annot, \
+                                           true_label_counts=category_true_label_counts)

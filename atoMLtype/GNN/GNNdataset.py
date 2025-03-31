@@ -6,7 +6,7 @@ from torch_geometric.loader import DataLoader
 from sklearn.preprocessing import LabelEncoder
 from typing import List
 from atoMLtype.utils.SDFdataset import SDFdataset
-from atoMLtype.GNN.GNNfeaturizer import GraphFeaturizer
+from atoMLtype.GNN.GNNfeaturizer import GraphFeaturizer, GraphFeaturizer_DMPNN
 
 
 class GNNdataset(Dataset):
@@ -172,3 +172,85 @@ class GNNdataset_subgraphs(Dataset):
 
     def __getitem__(self, idx):
         return self.mol_subgraphs[idx]
+
+
+class MPNNdataset(Dataset):
+    """
+    PyTorch Geometric dataset for training bond-focused MPNNs using molecules from an SDF file 
+    and atom labels from a JSON file.
+
+    Each molecule is encoded using `GraphFeaturizer_DMPNN` into graph format with atom features, 
+    edge indices, and bond features. Atom labels are mapped to class indices via `LabelEncoder`.
+    """
+
+
+    def __init__(self, sdf_path: str, json_labels: str = None):
+        """
+        Args:
+            sdf_path (str): Path to the SDF file.
+            json_labels (str, optional): Path to the JSON file containing atom labels.
+        """
+        super().__init__()
+
+        # Load the molecules from SDF into a custom class
+        self.sdf_dataset = SDFdataset(sdf_path, json_labels)
+
+        # Initialize the featurizer
+        self.featurizer = GraphFeaturizer_DMPNN()
+
+        # Create a mapping of unique atom types to indices
+        self.label_encoder = LabelEncoder()
+        self.all_labels = [label for labels in self.sdf_dataset.Y_labels.values() for label in labels]
+        self.label_encoder.fit(self.all_labels)  # Learn the mapping
+        
+        # Process molecules into PyG graph format
+        self.mol_graphs, self.mol_names = self._process_molecules()
+
+        # # Load molecules graphs into subgraph dataset
+        # self.dataset_subgraphs = GNNdataset_subgraphs(self.mol_graphs)
+        
+
+    def _process_molecules(self) -> List[Data]:
+        """
+        Converts X_molecules filtered molecules into PyTorch Geometric graph objects.
+        """
+        mol_graphs = []
+        mol_names = []
+
+        for mol_name, mol in self.sdf_dataset.X_molecules.items():
+            try:
+                bondGraph = self.mol_to_graph(mol, mol_name)
+                mol_graphs.append(bondGraph)
+                mol_names.append(mol_name)
+            except Exception as e:
+                print(f"Skipping molecule {mol_name} due to error: {e}")
+
+        return mol_graphs, mol_names
+
+    def mol_to_graph(self, mol, mol_name):
+        """
+        Converts an RDKit molecule into a PyTorch Geometric graph.
+        """
+        x, edge_index, edge_attr = self.featurizer.featurize(mol)
+
+        # Convert labels to tensor
+        y_values = self.sdf_dataset.Y_labels[mol_name]
+        y = torch.tensor(self.label_encoder.transform(y_values), dtype=torch.long)
+
+        # Store molecule index and name as metadata
+        Graph = Data(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            y=y,
+            y_values=y_values
+        )
+        Graph.mol_name = mol_name  # Attach molecule identifier
+        
+        return Graph
+    
+    def __len__(self):
+        return len(self.mol_graphs)
+
+    def __getitem__(self, idx):
+        return self.mol_graphs[idx]

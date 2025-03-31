@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, GATConv, global_mean_pool, MessagePassing, GINConv
+from torch_geometric.utils import add_self_loops
 import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,7 +11,6 @@ from torch_geometric.loader import DataLoader
 from torch.utils.data import Subset
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import KFold
-
 
 class BaselineGCN(nn.Module):
     def __init__(self, num_node_features, num_atom_types, hidden_dim=64):
@@ -75,8 +75,8 @@ class BaselineGIN(nn.Module):
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
 
-        x = F.elu(self.conv1(x, edge_index))
-        x = F.elu(self.conv2(x, edge_index))
+        x = F.elu(self.nn1(x, edge_index))
+        x = F.elu(self.nn2(x, edge_index))
 
         return self.fc(x)
 
@@ -132,13 +132,137 @@ class GAT_4L(nn.Module):
 
         return self.fc(x)  # Predict atom types (logits)
 
-# Next to implement
-# GraphSAGE (SAGEConv) → Learns representations from neighbor aggregation.
-# Graph Attention Networks (GAT) → Uses attention mechanisms to weigh neighbor contributions.
-# Message Passing Neural Networks (MPNN) → More expressive graph representation.
-# Cross-validation
-# Dropout
-# normalization
+
+class Att_AtomBondMPNNLayer(MessagePassing):
+    """
+    Attention-based MessagePassing layer for atom-bond graphs. 
+    Generates edge-conditioned messages weighted by attention scores.
+    """
+    def __init__(self, atom_dim, bond_dim, hidden_dim=1024):
+        super().__init__(aggr='add')
+        input_dim = atom_dim * 2 + bond_dim
+
+        # Message transformation MLP 
+        # Geting updated in backprop
+        self.edge_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+
+        # Attention scoring MLP
+        # Geting updated in backprop
+        self.att_mlp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, 1)
+        )
+
+    def forward(self, x, edge_index, edge_attr):
+        return self.propagate(edge_index, x=x, edge_attr=edge_attr)
+
+    def message(self, x_i, x_j, edge_attr):
+        # Concatenate source (x_j), target (x_i), and bond features
+        message_input = torch.cat([x_i, x_j, edge_attr], dim=-1)  # [num_edges, input_dim]
+
+        msg = self.edge_net(message_input)                        # [num_edges, hidden_dim]
+        attn_score = self.att_mlp(message_input).squeeze(-1)      # [num_edges]
+        attn_weight = torch.sigmoid(attn_score)                   # or softmax later
+        
+        return msg * attn_weight.unsqueeze(-1)                    # weighted message
+
+    def update(self, aggr_out):
+        return aggr_out
+    
+class MPNNLayer(MessagePassing):
+    def __init__(self, in_channels, out_channels, dropout=0.2):
+        super(MPNNLayer, self).__init__(aggr='add')  # "add" aggregation for message passing
+        self.mlp = nn.Sequential(
+            nn.Linear(2 * in_channels, out_channels),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(out_channels, out_channels)
+        )
+        
+    def forward(self, x, edge_index):
+        # Optionally add self-loops to include a node's own features.
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        return self.propagate(edge_index, x=x)
+    
+    def message(self, x_i, x_j):
+        # x_i: target node features, x_j: source node features.
+        # Concatenate and pass through the MLP to compute the message.
+        msg = self.mlp(torch.cat([x_i, x_j], dim=1))
+        return msg
+    
+    def update(self, aggr_out):
+        # Apply a ReLU activation after message aggregation.
+        return F.relu(aggr_out)
+
+class MPNN_4L(nn.Module):
+    def __init__(self, num_node_features, num_atom_types, hidden_dim=1024, dropout=0.2):
+        """
+        Args:
+            num_node_features (int): Dimensionality of input node features.
+            num_atom_types (int): Number of output atom type classes.
+            hidden_dim (int): Hidden dimension for the first layer.
+            dropout (float): Dropout rate to apply in each message passing layer.
+        """
+        super(MPNN_4L, self).__init__()
+        # Define four MPNN layers. Each subsequent layer reduces or maintains dimensions.
+        self.layer1 = MPNNLayer(num_node_features, hidden_dim, dropout)
+        self.layer2 = MPNNLayer(hidden_dim, hidden_dim, dropout)
+        self.layer3 = MPNNLayer(hidden_dim, hidden_dim // 2, dropout)
+        self.layer4 = MPNNLayer(hidden_dim // 2, hidden_dim // 4, dropout)
+        
+        # Final classification layer: projects to the number of atom types.
+        self.fc = nn.Linear(hidden_dim // 4, num_atom_types)
+        
+    def forward(self, data):
+        # Expecting data.x (node features) and data.edge_index (graph connectivity)
+        x, edge_index = data.x, data.edge_index
+        x = self.layer1(x, edge_index)
+        x = self.layer2(x, edge_index)
+        x = self.layer3(x, edge_index)
+        x = self.layer4(x, edge_index)
+        # Return the raw logits for each node.
+        return self.fc(x)
+
+
+class Att_AtomBondMPNN(nn.Module):
+    """
+    Stacked attention-based Atom-Bond MPNN for atom classification.
+    Each layer passes messages between atoms using edge attributes (bonds),
+    and final node embeddings are used for classification.
+    """
+    def __init__(self, atom_input_dim, bond_input_dim, num_classes, num_layers=5, hidden_dim=1024):
+        super().__init__()
+        # Message transformation MLP 
+        # Geting updated in backprop
+        self.atom_encoder = nn.Linear(atom_input_dim, hidden_dim)
+
+        self.message_layers = nn.ModuleList([
+            Att_AtomBondMPNNLayer(atom_dim=hidden_dim, bond_dim=bond_input_dim, hidden_dim=hidden_dim)
+            for _ in range(num_layers)
+        ])
+        # Aggregated message into classfications
+        # Geting updated in backprop
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, num_classes)
+        )
+
+    def forward(self, data):
+        x = self.atom_encoder(data.x)      # [num_atoms, hidden_dim]
+        edge_index = data.edge_index       # [2, num_edges]
+        edge_attr = data.edge_attr         # [num_edges, bond_input_dim]
+
+        for layer in self.message_layers:
+            x = x + layer(x, edge_index, edge_attr)  # residual + attention
+
+        return self.classifier(x)
+
 
 
 # TRAINER
@@ -194,6 +318,7 @@ class GNNTrainer:
             # Create train & validation loaders for this fold
             train_subset = Subset(self.dataset, train_idx)
             val_subset = Subset(self.dataset, val_idx)
+
             train_loader = DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
             val_loader = DataLoader(val_subset, batch_size=self.batch_size, shuffle=False)
 
@@ -208,24 +333,20 @@ class GNNTrainer:
                 total_batch_loss = 0.0
                 total_samples = 0  # Keep track of total samples processed  
                 for batch_data in train_loader:
-                    batch_data = batch_data.to(next(self.model.parameters()).device)  # Ensure device consistency
-                    batch_size = batch_data.y.size(0)  # Get actual batch size
 
-                    
-                    self.optimizer.zero_grad()
-
-                    # Forward pass
-                    batch_pred = self.model(batch_data)
-
+                    batch_data = batch_data.to(next(self.model.parameters()).device)
+                    pred = self.model(batch_data)
+                    target = batch_data.y
+                
                     # Compute loss
-                    batch_loss = self.loss_fn(batch_pred, batch_data.y)
+                    self.optimizer.zero_grad()
+                    batch_loss = self.loss_fn(pred, target)
                     batch_loss.backward()
                     self.optimizer.step()
 
-                    
                     # Normalize by batch size and accumulate
-                    total_batch_loss += batch_loss.item() * batch_size  # Scale loss by batch size
-                    total_samples += batch_size  # Track total number of samples processed
+                    total_batch_loss += batch_loss.item() * target.size(0)  # Scale loss by batch size
+                    total_samples += target.size(0)  # Track total number of samples processed
 
                 epoch_loss += total_batch_loss/ total_samples
                 train_loss_per_epoch.append(epoch_loss)
@@ -273,9 +394,11 @@ class GNNTrainer:
         total_loss = 0.0
         with torch.no_grad():
             for batch_data in dataloader:
-                batch_data = batch_data.to(next(self.model.parameters()).device)  # Move to correct device
+
+                batch_data = batch_data.to(next(self.model.parameters()).device)
                 batch_pred = self.model(batch_data)
                 batch_loss = self.loss_fn(batch_pred, batch_data.y)
+                
                 total_loss += batch_loss.item() /len(dataloader)
         if print_loss:
             print(f"Validation Loss: {total_loss:.4f}")

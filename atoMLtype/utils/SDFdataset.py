@@ -10,12 +10,21 @@ class BaseDataset(ABC):
     """
     Abstract base class for molecular datasets.
     Ensures all dataset types implement essential methods.
+
+    Attributes:
+        data_source (str): Path to the primary data file (e.g., SDF, CSV).
+        label_source (str): Path to the labels file, if applicable.
+        molecules (Dict[str, Chem.Mol]): Dictionary of molecule names and RDKit molecule objects.
+        Y_labels (Dict[str, List[str]]): Dictionary of molecule names and atom type labels.
+        X_molecules (Dict[str, Chem.Mol]): Filtered molecules with valid labels.
     """
 
     def __init__(self, data_source: str, label_source: str = None):
         """
+        Initializes the dataset by loading molecules and labels.
+
         Args:
-            data_source (str): Path to the primary data file (SDF, CSV, etc.).
+            data_source (str): Path to the primary data file (e.g., SDF, CSV).
             label_source (str, optional): Path to the labels file, if applicable.
         """
         self.data_source = data_source
@@ -27,40 +36,61 @@ class BaseDataset(ABC):
         self.Y_labels = self._load_labels() if label_source else None
         self.X_molecules = self._filter_molecules()
 
-        self.log.info(f"Dataset initialized with {len(self.filtered_molecules)} molecules.")
+        self.log.info(f"Dataset initialized with {len(self.X_molecules)} molecules.")
 
     @abstractmethod
     def _load_molecules(self) -> Dict[str, Chem.Mol]:
-        """Must be implemented in subclasses to load molecules from the dataset."""
+        """
+        Abstract method to load molecules from the dataset.
+
+        Returns:
+            Dict[str, Chem.Mol]: Dictionary of molecule names and RDKit molecule objects.
+        """
         pass
 
     @abstractmethod
     def _load_labels(self) -> Dict[str, List[str]]:
-        """Must be implemented in subclasses to load labels from the dataset."""
+        """
+        Abstract method to load labels from the dataset.
+
+        Returns:
+            Dict[str, List[str]]: Dictionary of molecule names and atom type labels.
+        """
         pass
-    
+
     @abstractmethod
-    def _filter_molecules(self) -> Dict[str, List[str]]:
-        """Must be implemented in subclasses to filter X_molecules based on load Y_labels from the dataset."""
+    def _filter_molecules(self) -> Dict[str, Chem.Mol]:
+        """
+        Abstract method to filter molecules based on loaded labels.
+
+        Returns:
+            Dict[str, Chem.Mol]: Filtered dictionary of molecule names and RDKit molecule objects.
+        """
         pass
+
 
 class SDFdataset(BaseDataset):
     """
-    Class to organize SDF files and atom type labels for featurization.
-    
-    - Loads SDF files
-    - Extracts molecular structures
-    - Processes atom ordering and atom type labels for ML pipelines
+    Handles SDF files and atom type labels for featurization.
 
     Attributes:
         data_source (str): Path to the SDF file.
-        json_path (str): Path to the JSON file containing atom labels.
+        label_source (str): Path to the JSON file containing atom labels.
         molecules (List[Chem.Mol]): List of RDKit molecule objects.
         molNames (List[str]): List of molecule names.
         atoms (List[List[int]]): Atom indices, continuous across molecules.
-        atom_labels (List[List[str]]): List of atom type labels for each molecule.
+        Y_labels (Dict[str, List[str]]): Dictionary of molecule names and atom type labels.
+        X_molecules (Dict[str, Chem.Mol]): Filtered molecules with valid labels.
     """
+
     def __init__(self, data_source: str, label_source: str = None):
+        """
+        Initializes the SDF dataset by loading molecules and labels.
+
+        Args:
+            data_source (str): Path to the SDF file.
+            label_source (str, optional): Path to the JSON file containing atom labels.
+        """
         self.data_source = data_source
         self.label_source = label_source
         self.log = logging.getLogger(__name__)
@@ -87,9 +117,16 @@ class SDFdataset(BaseDataset):
 
         self.log.info(f"Successfully parsed {len(self.molecules)} molecules with valid names.")
 
-    
     def _load_molecules(self, sanitize: bool = False) -> List[Chem.Mol]:
-        """Loads molecules from an SDF file, allowing invalid valences to be ignored."""
+        """
+        Loads molecules from an SDF file.
+
+        Args:
+            sanitize (bool, optional): Whether to sanitize molecules. Defaults to False.
+
+        Returns:
+            List[Chem.Mol]: List of RDKit molecule objects.
+        """
         suppl = Chem.SDMolSupplier(self.data_source, sanitize=sanitize, removeHs=False)
         molecules = []
         invalid_count = 0
@@ -111,23 +148,37 @@ class SDFdataset(BaseDataset):
 
         self.log.info(f"Loaded {len(molecules)} molecules. Skipped {invalid_count} due to critical errors.")
         return molecules
-    
+
     def _parse_atoms(self) -> Tuple[List[str], List[List[int]]]:
-        """Parses molecule names and atom ordering."""
+        """
+        Parses molecule names and atom ordering.
+
+        Returns:
+            Tuple[List[str], List[List[int]]]: Molecule names and atom order indices.
+        """
         return self._load_sdfName_sdfAtOrd(self.molecules)
 
     def get_molecule(self, index: int) -> Chem.Mol:
-        """Returns a specific molecule by index."""
+        """
+        Retrieves a specific molecule by index.
+
+        Args:
+            index (int): Index of the molecule.
+
+        Returns:
+            Chem.Mol: RDKit molecule object.
+        """
         return self.molecules[index]
 
     def get_labels(self) -> np.ndarray:
         """
-        Returns a 1D array of labels from Y_labels (which is Dict[str, List[str]]).
-        
-        Ensures that labels are ordered to match the order of atoms in X_molecules.
-        
+        Retrieves a flattened array of atom labels for all molecules.
+
         Returns:
-            np.ndarray: Flattened array of atom labels for all molecules.
+            np.ndarray: Flattened array of atom labels.
+
+        Raises:
+            ValueError: If labels are not loaded or are empty.
         """
         if not self.Y_labels:
             raise ValueError("Y_labels is empty or not loaded. Ensure labels are provided.")
@@ -141,17 +192,15 @@ class SDFdataset(BaseDataset):
 
         return np.array(labels)  # Return as a NumPy array
 
-    
     def _load_labels(self, json_path: str) -> Dict[str, List[str]]:
         """
         Loads atom type labels from a JSON file.
-        JSON format:
-            [
-                {"Name": "Molecule_1", "Atom_types": ["C_sp3", "O_sp2", "N_sp3"]},
-                {"Name": "Molecule_2", "Atom_types": ["H", "C_sp2", "Cl"]}
-            ]
+
+        Args:
+            json_path (str): Path to the JSON file.
+
         Returns:
-            Dict[str, List[str]]: {mol_name: [atom_type_1, atom_type_2, ...]}
+            Dict[str, List[str]]: Dictionary of molecule names and atom type labels.
         """
         with open(json_path, "r") as f:
             data = json.load(f)
@@ -164,13 +213,20 @@ class SDFdataset(BaseDataset):
             self.Y_labels = self._map_labels()
             self.X_molecules = self._filter_molecules()
 
-
         self.log.info(f"Loaded atom type labels for {len(label_dict)} molecules from {json_path}")
 
         return label_dict
-    
-    def _map_labels(self) -> List[List[str]]:
-        """Assigns labels to each atom based on the JSON dictionary, logging missing molecules."""
+
+    def _map_labels(self) -> Dict[str, List[str]]:
+        """
+        Maps labels to each atom based on the JSON dictionary.
+
+        Returns:
+            Dict[str, List[str]]: Dictionary of molecule names and atom type labels.
+
+        Raises:
+            ValueError: If there are mismatches between molecule names or atom counts.
+        """
         labels = {}
         total_skipped = 0  # Track total atoms skipped
         skipped_molecules = {}   # Dict of molecules that were missing from the JSON, and why
@@ -221,13 +277,13 @@ class SDFdataset(BaseDataset):
                 self.log.warning(f" - {mol_name}")
 
         return labels
-    
+
     def _filter_molecules(self) -> Dict[str, Chem.Mol]:
         """
-        Filters molecules based on loaded Y labels so that there are only (X, Y) pairs.
+        Filters molecules to include only those with valid labels.
 
         Returns:
-            - filtered_molecules: Dict[str, Chem.Mol] - Only molecules with labels.
+            Dict[str, Chem.Mol]: Filtered dictionary of molecule names and RDKit molecule objects.
         """
         filtered_molecules = {}
 
@@ -263,25 +319,24 @@ class SDFdataset(BaseDataset):
                 self.log.warning(f" - {mol_name}")
             self.log.info(f"Filtered {len(filtered_molecules)} valid molecules for training.")
             return filtered_molecules
-        
+
         assert len(filtered_molecules) == len(self.Y_labels), (
             f"Mismatch: {len(filtered_molecules)} valid molecules, but {len(self.Y_labels)} labels."
-            )
-        
+        )
+
         self.log.info(f"Filtered {len(filtered_molecules)} valid molecules for training.")
         return filtered_molecules
-
-
 
     @staticmethod
     def _load_sdfName_sdfAtOrd(molecules: List[Chem.Mol]) -> Tuple[List[str], List[List[int]]]:
         """
-        Extracts:
-        - A list of molecule names.
-        - A list of atom order indices (continuous across molecules).
-        
+        Extracts molecule names and atom order indices.
+
+        Args:
+            molecules (List[Chem.Mol]): List of RDKit molecule objects.
+
         Returns:
-            Tuple[List[str], List[List[int]]]: Names and atom orders.
+            Tuple[List[str], List[List[int]]]: Molecule names and atom order indices.
         """
         sdfName_data = []
         sdfAtOrd_data = []
@@ -298,7 +353,7 @@ class SDFdataset(BaseDataset):
 
             # Assign atom order (continuous across molecules)
             atom_order = list(range(atom_order_stIdx, atom_order_stIdx + num_atoms))
-            
+
             # Update the starting index for the next molecule
             atom_order_stIdx += num_atoms
 
@@ -307,47 +362,3 @@ class SDFdataset(BaseDataset):
             sdfAtOrd_data.append(atom_order)
 
         return sdfName_data, sdfAtOrd_data
-    
-
-class ESPdataset(BaseDataset):
-    """
-    Class to organize SDF files and atom type labels for featurization.
-    
-    - Loads SDF files
-    - Extracts molecular structures
-    - Processes atom ordering and atom type labels for ML pipelines
-
-    Attributes:
-        data_source (str): Path to the SDF file.
-        json_path (str): Path to the JSON file containing atom labels.
-        molecules (List[Chem.Mol]): List of RDKit molecule objects.
-        molNames (List[str]): List of molecule names.
-        atoms (List[List[int]]): Atom indices, continuous across molecules.
-        atom_labels (List[List[str]]): List of atom type labels for each molecule.
-    """
-    def __init__(self, data_source: str, label_source: str = None):
-        self.data_source = data_source
-        self.label_source = label_source
-        self.log = logging.getLogger(__name__)
-        self.log.setLevel(logging.INFO)
-
-        # SDF Processing and Ordering
-        self.molecules = self._load_molecules()
-        self.molNames, self.atoms = self._parse_atoms()
-
-        # AT Label Processing and Ordering
-        if label_source:
-            self.label_dict = self._load_labels(label_source)
-            self.Y_labels = self._map_labels()
-            self.X_molecules = self._filter_molecules()
-        else:
-            self.label_dict = None
-            self.Y_labels = None
-            self.X_molecules = None
-
-        # Check if molecule names match the number of valid molecules
-        assert len(self.molNames) == len(self.molecules), (
-            f"Mismatch: {len(self.molNames)} names, but {len(self.molecules)} molecules."
-        )
-
-        self.log.info(f"Successfully parsed {len(self.molecules)} molecules with valid names.")

@@ -11,7 +11,16 @@ DEFAULT_CATEGORIES = {"c", "h", "o", "n", "other"}
 
 # Function to categorize atom types
 def categorize_atom_type(atom_type: str, categories=DEFAULT_CATEGORIES) -> str:
-    """Returns the elemental category based on the first letter or known prefixes of the atom type."""
+    """
+    Categorizes an atom type based on its elemental prefix.
+
+    Args:
+        atom_type (str): The atom type to categorize.
+        categories (set): Set of known atom categories.
+
+    Returns:
+        str: The category of the atom type, or "other" if no match is found.
+    """
     if not atom_type:
         return "unknown"
 
@@ -28,30 +37,36 @@ def categorize_atom_type(atom_type: str, categories=DEFAULT_CATEGORIES) -> str:
 # Count Atom Type Occurrences
 def count_atom_types(y_labels: Union[Dict[str, List[str]], np.ndarray]) -> Counter:
     """
-    Counts occurrences of each atom type in a given dataset.
+    Counts occurrences of each atom type in a dataset.
 
     Args:
-        y_labels: A dictionary {molecule_name: [atom_types]} or a NumPy array of atom types.
+        y_labels (Union[Dict[str, List[str]], np.ndarray]): A dictionary {molecule_name: [atom_types]} 
+            or a NumPy array of atom types.
 
     Returns:
         Counter: A dictionary-like object with atom type counts.
     """
-    # Convert input to a flattened list of atom types
+    # Flatten input to a list of atom types
     if isinstance(y_labels, np.ndarray):
+        # Handle NumPy arrays (flatten if multidimensional)
         all_atom_types = y_labels.flatten().tolist() if y_labels.ndim > 1 else y_labels.tolist()
     elif isinstance(y_labels, dict):
+        # Handle dictionaries by flattening all atom types
         all_atom_types = [atom for labels in y_labels.values() for atom in labels]
     else:
         raise TypeError("y_labels must be a dictionary or a numpy array.")
 
     return Counter(all_atom_types)
 
+
 def get_accuracies(y_true, y_pred):
     """
-    Computes hierarchical accuracy metrics:
-    - Atom-wise accuracy (matches `accuracy_score`)
+    Computes hierarchical accuracy metrics for atom type predictions.
+
+    Metrics include:
+    - Atom-wise accuracy
     - Atom-type accuracy
-    - Category-wise accuracy (correct predictions within category)
+    - Category-wise accuracy
     - Cross-category misclassification rate
     - Per-category atom-type accuracy
 
@@ -65,7 +80,7 @@ def get_accuracies(y_true, y_pred):
     if len(y_true) != len(y_pred):
         raise ValueError("y_true and y_pred must be of the same length")
 
-    # Compute overall atom-wise accuracy (matches sklearn's accuracy_score)
+    # Compute overall atom-wise accuracy
     correct_atom_wise = accuracy_score(y_true, y_pred)
 
     # Compute atom-type accuracy
@@ -76,7 +91,7 @@ def get_accuracies(y_true, y_pred):
         for atom in atom_type_counts
     }
 
-    # Compute category-wise accuracy (correct predictions staying within category)
+    # Compute category-wise accuracy
     category_counts = Counter(categorize_atom_type(atom) for atom in y_true)  # Count of true labels per category
     category_correct = Counter()  # Track correct predictions per category
     cross_category_misclassifications = Counter()  # Track misclassifications per category
@@ -122,19 +137,19 @@ def get_accuracies(y_true, y_pred):
     }
 
 
-
 # Plot Atom Type Distribution
 def plot_atom_distribution(y_labels, order=DEFAULT_CATEGORIES, plot=True):
     """
-    Generates a bar plot showing the distribution of atom types and returns a DataFrame.
+    Generates a bar plot showing the distribution of atom types.
 
     Args:
-        y_labels: Dictionary of {mol_name: [atom_types]} or a NumPy array.
-        order: Optional custom sorting order for atom types.
-        plot: If True, displays a bar plot.
+        y_labels (Union[Dict[str, List[str]], np.ndarray]): Dictionary of {mol_name: [atom_types]} 
+            or a NumPy array of atom types.
+        order (set): Custom sorting order for atom types.
+        plot (bool): If True, displays a bar plot.
 
     Returns:
-        pd.DataFrame: Dataframe with atom type counts.
+        pd.DataFrame: DataFrame with atom type counts.
     """
     atom_type_counts = count_atom_types(y_labels)
 
@@ -155,6 +170,7 @@ def plot_atom_distribution(y_labels, order=DEFAULT_CATEGORIES, plot=True):
     atom_type_df = pd.DataFrame(sorted_atom_types, columns=["Atom Type", "Count", "Category"])
 
     if plot:
+        # Plot the distribution of atom types
         plt.figure(figsize=(18, 6))
         sns.barplot(x="Atom Type", y="Count", hue="Category", palette="bright", data=atom_type_df)
         plt.xlabel("Atom Type")

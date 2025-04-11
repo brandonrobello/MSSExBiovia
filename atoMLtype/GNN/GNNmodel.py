@@ -11,6 +11,7 @@ from torch_geometric.loader import DataLoader
 from torch.utils.data import Subset
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import KFold
+from atoMLtype.utils.predRecord import PredRecord, AtomPrediction
 
 
 class BaselineGCN(nn.Module):
@@ -435,6 +436,94 @@ class Att_AtomBondMPNN(nn.Module):
 
         return self.classifier(x)
 
+class Att_AtomBondMPNNLayer_analysis(MessagePassing):
+    """
+    Attention-based MessagePassing layer for atom-bond graphs. 
+    Generates edge-conditioned messages weighted by attention scores.
+    """
+    def __init__(self, atom_dim, bond_dim, hidden_dim=1024):
+        super().__init__(aggr='add')
+        input_dim = atom_dim * 2 + bond_dim
+
+        # Message transformation MLP 
+        # Geting updated in backprop
+        self.edge_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+
+        # Attention scoring MLP
+        # Geting updated in backprop
+        self.att_mlp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, 1)
+        )
+
+    def forward(self, x, edge_index, edge_attr, return_attention=False):
+        # If return_attention, we’ll store attention scores for later inspection
+        self.return_attention = return_attention
+        self._stored_attention = None
+        return self.propagate(edge_index, x=x, edge_attr=edge_attr)
+
+    def message(self, x_i, x_j, edge_attr):
+        # Concatenate source (x_j), target (x_i), and bond features
+        message_input = torch.cat([x_i, x_j, edge_attr], dim=-1)  # [num_edges, input_dim]
+
+        msg = self.edge_net(message_input)                        # [num_edges, hidden_dim]
+        attn_score = self.att_mlp(message_input).squeeze(-1)      # [num_edges]
+        attn_weight = torch.sigmoid(attn_score)                   # or softmax later
+
+        if self.return_attention:
+            self._stored_attention = attn_weight.detach().cpu()  # save for analysis
+        
+        return msg * attn_weight.unsqueeze(-1)                    # weighted message
+
+    def update(self, aggr_out):
+        return aggr_out
+    
+    def get_attention(self):
+        return self._stored_attention
+
+
+class Att_AtomBondMPNN_analysis(nn.Module):
+    def __init__(self, atom_input_dim, bond_input_dim, num_classes, num_layers=5, hidden_dim=1024):
+        super().__init__()
+
+        self.atom_encoder = nn.Linear(atom_input_dim, hidden_dim)
+
+        self.message_layers = nn.ModuleList([
+            Att_AtomBondMPNNLayer_analysis(atom_dim=hidden_dim, bond_dim=bond_input_dim, hidden_dim=hidden_dim)
+            for _ in range(num_layers)
+        ])
+
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, num_classes)
+        )
+
+    def forward(self, data, analysis=False):
+        x = self.atom_encoder(data.x)   # [num_atoms, hidden_dim]
+        x_embeddings = x.clone().detach()  # Detach or clone if you want to keep it separate from computation
+        attention_weights = []
+
+        edge_index = data.edge_index
+        edge_attr = data.edge_attr
+
+        for layer in self.message_layers:
+            x = x + layer(x, edge_index, edge_attr, return_attention=analysis)
+            if analysis:
+                attention_weights.append(layer.get_attention())
+
+        classifier_embeddings = self.classifier[:-1](x).detach()
+        logits = self.classifier(x)
+
+        if analysis:
+            return logits, x_embeddings, classifier_embeddings, attention_weights
+        return logits
+
 
 
 # TRAINER
@@ -699,3 +788,78 @@ class GNNTrainer:
             y_true_labels = y_true.tolist()
 
         return y_true_labels, y_pred_labels
+
+    def predict_analysis(self, dataset):
+        """
+        Predicts atom types on a dataset and returns a structured PredRecord object.
+
+        Args:
+            dataset (Dataset): Dataset to predict on.
+            return_embeddings (bool): Whether to capture initial atom embeddings.
+
+        Returns:
+            PredRecord: structured prediction records including labels and optional embeddings.
+        """
+        self.model.eval()
+        pred_record = PredRecord()
+
+        pred_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+
+        original_dataset = getattr(self.dataset, "dataset", self.dataset)
+        label_encoder = getattr(original_dataset, "label_encoder", None)
+
+        with torch.no_grad():
+            for batch_data in tqdm(pred_loader, leave=False):
+                batch_data = batch_data.to(next(self.model.parameters()).device)
+            
+                # Forward pass with embeddings
+                logits, x_embeddings, clf_embeddings, att_weights = self.model(batch_data, analysis=True)
+                x_embeddings_np = x_embeddings.cpu().numpy()
+                clf_embeddings_np = clf_embeddings.cpu().numpy()
+
+                # Labels
+                pred_classes = label_encoder.inverse_transform(
+                    logits.argmax(dim=1).cpu().numpy().tolist()
+                )
+                true_classes = label_encoder.inverse_transform(
+                    batch_data.y.cpu().numpy().flatten().tolist()
+                    )
+                # mol_name tracking
+                graph_indices = batch_data.batch.cpu().numpy()
+                mol_names = batch_data.mol_name
+                
+                
+                # Map attention weights for each layer
+                attention_maps_per_layer = []
+                # edge_index tracking
+                edge_index_np = batch_data.edge_index.cpu().numpy()  # shape [2, num_edges]
+
+                for layer_attn_tensor in att_weights:  # att_weights is a list of Tensors, one per layer
+                    layer_attn_np = layer_attn_tensor.cpu().numpy()
+                    layer_map = [
+                        {
+                            "src": int(edge_index_np[0, i]),
+                            "dst": int(edge_index_np[1, i]),
+                            "attn": float(layer_attn_np[i])
+                        }
+                        for i in range(edge_index_np.shape[1])
+                    ]
+                    attention_maps_per_layer.append(layer_map)
+
+                for i in range(len(batch_data.x)):
+                    atom = AtomPrediction(
+                        atom_idx_in_mol=int(batch_data.atom_idx_in_mol[i]),  # per molecule
+                        global_atom_idx=int(batch_data.global_atom_idx[i]), # across dataset
+                        mol_name=mol_names[graph_indices[i]],         # per atom
+                        true_label=true_classes[i],
+                        pred_label=pred_classes[i],
+                        x_embedding=x_embeddings_np[i],
+                        clf_embeddings=clf_embeddings_np[i],
+                    )
+                    pred_record.add_atom(atom)
+                    pred_record.add_molecule_attention(
+                        mol_name=mol_names[graph_indices[i]],
+                        attention_maps=attention_maps_per_layer
+                    )
+
+        return pred_record

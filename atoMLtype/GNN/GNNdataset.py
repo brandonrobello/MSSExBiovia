@@ -285,10 +285,12 @@ class MPNNdataset(Dataset):
         """
         mol_graphs = []
         mol_names = []
+        global_atom_idx = 0  # running index across all atoms in all molecules of the dataset
 
         for mol_name, mol in self.sdf_dataset.X_molecules.items():
             try:
-                bondGraph = self.mol_to_graph(mol, mol_name)
+                bondGraph = self.mol_to_graph(mol, mol_name, global_atom_idx) # Pass global index
+                global_atom_idx += bondGraph.num_nodes  # increment by number of atoms
                 mol_graphs.append(bondGraph)
                 mol_names.append(mol_name)
             except Exception as e:
@@ -296,7 +298,7 @@ class MPNNdataset(Dataset):
 
         return mol_graphs, mol_names
 
-    def mol_to_graph(self, mol, mol_name):
+    def mol_to_graph(self, mol, mol_name, global_atom_start_idx):
         """
         Converts an RDKit molecule into a PyTorch Geometric graph.
 
@@ -314,6 +316,9 @@ class MPNNdataset(Dataset):
         labels = collapse_atom_types(y_values) if self.collapse else y_values
         y = torch.tensor(self.label_encoder.transform(labels), dtype=torch.long)
 
+        # Get the size/num_atoms in the data
+        num_atoms = x.size(0)
+
         # Create a PyTorch Geometric Data object
         Graph = Data(
             x=x,
@@ -322,8 +327,13 @@ class MPNNdataset(Dataset):
             y=y,
             y_values=y_values
         )
+        # Custom metadata
         Graph.mol_name = mol_name  # Attach molecule identifier
-
+        Graph.atom_idx_in_mol = torch.arange(num_atoms)  # [0, ..., num_atoms-1] in mol
+        Graph.global_atom_idx = torch.arange(
+            global_atom_start_idx,
+            global_atom_start_idx + num_atoms)  # Idx of atoms globally is processed dataset
+        
         return Graph
 
     def __len__(self):

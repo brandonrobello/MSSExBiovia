@@ -3,6 +3,7 @@
 
 # Skipped_molecules log files
 skipped_molecules*.json
+nonlabeled_*.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

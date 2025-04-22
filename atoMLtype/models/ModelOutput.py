@@ -139,11 +139,16 @@ class PredictionRecord:
         return [a for a in self.atom_records if a.true_label != a.pred_label]
 
     @property
+    def mismatches_mask(self) -> List[bool]:
+        """Returns bool mask where prediction does NOT match ground truth."""
+        return [a.true_label != a.pred_label for a in self.atom_records]
+
+    @property
     def mismatched_molecules(self) -> Dict[str, List[AtomResult]]:
         """
         Returns a dictionary of molecule names → list of mismatched atoms.
         """
-        mismatch_dict = defaultdict(list)
+        mismatch_dict = DefaultDict(list)
         for atom in self.mismatches:
             mismatch_dict[atom.mol_name].append(atom)
         return dict(mismatch_dict)

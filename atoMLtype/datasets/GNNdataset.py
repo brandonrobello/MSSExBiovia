@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from rdkit import Chem
-from typing import List
+from typing import List, Union
 from atoMLtype.datasets.SDFdataset import SDFdataset
 from atoMLtype.datasets.GNNfeaturizer import GraphFeaturizer
 from atoMLtype.models.ModelEncoder import ModelEncoder
@@ -63,7 +63,53 @@ class GNNdataset(Dataset):
             self.encoded_labels = None
 
         # Convert molecules to graph representations
+        self.mols = self.sdf_dataset.get_molecules(labeled=labeled)
         self.mol_graphs = self._process_molecules(self.labelled_graphs, encoder)
+
+
+    def get_mol(self, idx: Union[int, str]) -> Chem.Mol:
+        """
+        Retrieve the RDKit molecule by index or name (_Name property).
+
+        Args:
+            idx (int or str): Index or molecule name.
+
+        Returns:
+            Chem.Mol: RDKit Mol object.
+
+        Raises:
+            ValueError: If no molecule with that name exists.
+        """
+        if isinstance(idx, str):
+            for mol in self.mols:
+                if mol.HasProp("_Name") and mol.GetProp("_Name") == idx:
+                    return mol
+            raise ValueError(f"Molecule with name '{idx}' not found.")
+        elif isinstance(idx, int):
+            return self.mols[idx]
+        else:
+            raise TypeError("Index must be an integer or a string (_Name).")
+        
+    def get_mol_graph(self, idx: Union[int, str]) -> Data:
+        """
+        Get PyG graph by molecule name or index.
+
+        Args:
+            idx (int or str): Molecule index or _Name.
+
+        Returns:
+            torch_geometric.data.Data: Corresponding graph.
+        """
+        if isinstance(idx, str):
+            for i, g in enumerate(self.mol_graphs):
+                if hasattr(g, "mol_name") and g.mol_name == idx:
+                    return g
+            raise ValueError(f"Molecule with name '{idx}' not found in graphs.")
+        elif isinstance(idx, int):
+            return self.mol_graphs[idx]
+        else:
+            raise TypeError("Index must be int or str")
+
 
     def _process_molecules(self, labeled: bool = True, encoder: ModelEncoder = None) -> List[Data]:
         """
@@ -79,13 +125,11 @@ class GNNdataset(Dataset):
         graphs = []
         global_atom_idx = 0  # Track atom index across all molecules
 
-        mols = self.sdf_dataset.get_molecules(labeled=labeled)
-
         self.log.info(
-            f"Attempting to process {len(mols)} {'*labeled*' if labeled else '*all*'} mols from sdf dataset to graphs."
+            f"Attempting to process {len(self.mols)} {'*labeled*' if labeled else '*all*'} mols from sdf dataset to graphs."
         )
 
-        for mol in mols:
+        for mol in self.mols:
             try:
                 graph = self._mol_to_graph(mol, global_atom_idx, labeled, encoder)
                 global_atom_idx += graph.num_nodes  # increment by number of atoms
@@ -94,7 +138,7 @@ class GNNdataset(Dataset):
                 mol_name = mol.GetProp("_Name")
                 self.log.warning(f"Skipping molecule {mol_name} due to error: {e}")
         
-        self.log.info(f"Processed {len(graphs)} molecular graphs from {len(mols)} molecules.")
+        self.log.info(f"Processed {len(graphs)} molecular graphs from {len(self.mols)} molecules.")
         return graphs
 
 

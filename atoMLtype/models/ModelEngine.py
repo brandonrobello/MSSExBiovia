@@ -76,5 +76,8 @@ class ModelEngine:
 
         if analysis:
             self.model.disable_analysis()
+            
+        prediction_record.compute_statistics()
+
 
         return prediction_record

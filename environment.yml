@@ -19,6 +19,7 @@ dependencies:
   - pip:
       - optree>=0.13.0
       - pytest
+      - umap
 
 #usage
 # conda env create -f environment.yml

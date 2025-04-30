@@ -26,6 +26,7 @@ def visualize_prediction_embeddings(
     max_points: int = None,
     show_legend: bool = True,
     figsize: tuple = (10, 6),
+    title: str = None
 ):
     """
     Visualizes atom embeddings from a PredictionRecord using UMAP or TSNE.
@@ -40,6 +41,7 @@ def visualize_prediction_embeddings(
         max_points (int): Subsample to this number of atoms.
         show_legend (bool): Whether to display the legend.
         figsize (tuple): Size of the plot.
+        title (str): Title for plot.
     """
     all_atoms = pred_record.atom_records
 
@@ -96,8 +98,10 @@ def visualize_prediction_embeddings(
 
         plt.legend(handles=handles, title=color_by.replace("_", " ").title(), 
                    bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-
-    plt.title(f"{method.upper()} projection of atom embeddings colored by {color_by}")
+    if title:
+        plt.title(title)
+    else:
+        plt.title(f"{method.upper()} projection of atom embeddings colored by {color_by}")
     plt.xlabel("Dim 1")
     plt.ylabel("Dim 2")
     plt.tight_layout()

@@ -175,7 +175,37 @@ class PredictionRecord:
                     row.update({f"{k}_{i}": v[i] for i in range(len(v))})
             rows.append(row)
         return pd.DataFrame(rows)
+    
+    def compute_statistics(self):
+        """
+        Computes and attaches summary statistics:
+        - pred_label_counter: distribution of predicted labels
+        - accuracy: ratio of correctly predicted atoms
+        - min/mean/max confidence
+        """
+        from collections import Counter
+        import numpy as np
 
+        self.pred_label_counter = Counter(self.pred_labels)
+
+        true_labels = [a.true_label for a in self.atom_records if a.true_label is not None]
+        pred_labels = [a.pred_label for a in self.atom_records]
+        confidences = [a.confidence for a in self.atom_records if a.confidence is not None]
+
+        if true_labels:
+            correct = sum(p == t for p, t in zip(pred_labels, true_labels))
+            self.accuracy = correct / len(true_labels)
+        else:
+            self.accuracy = None
+
+        if confidences:
+            self.min_confidence = float(np.min(confidences))
+            self.mean_confidence = float(np.mean(confidences))
+            self.max_confidence = float(np.max(confidences))
+        else:
+            self.min_confidence = None
+            self.mean_confidence = None
+            self.max_confidence = None
 
     def summary(self):
         """
@@ -207,5 +237,7 @@ class PredictionRecord:
         if self.atom_records and self.atom_records[0].confidence is not None:
             confidences = [a.confidence for a in self.atom_records if a.confidence is not None]
             print(f"\nConfidence: min={min(confidences):.2f}, mean={np.mean(confidences):.2f}, max={max(confidences):.2f}")
+        
 
 
+        

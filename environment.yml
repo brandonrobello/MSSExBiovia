@@ -1,0 +1,26 @@
+name: biovia-env
+channels:
+  - pyg
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+  - scikit-learn
+  - rdkit
+  - pytorch=2.1.0
+  - torchvision
+  - pip
+  - pyg  # adds torch-geometric, scatter, sparse, etc.
+  - pip:
+      - optree>=0.13.0
+      - pytest
+      - umap
+
+#usage
+# conda env create -f environment.yml
+# conda activate biovia-env

@@ -32,6 +32,19 @@ class BaselineGCN(BaseGNNModel):
         self.nn2 = GCNConv(hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, self.num_classes)
 
+        # Metadata required for save method
+        self.num_node_features = num_node_features
+        self.hidden_dim = hidden_dim
+
+    def _get_metadata(self) -> dict:
+        """
+        Returns architecture metadata for saving/loading.
+        """
+        return {
+            'num_node_features': self.num_node_features,
+            'hidden_dim': self.hidden_dim,
+        }
+
     def forward(self, data):
         """
         Executes a forward pass through the GCN.
@@ -88,6 +101,22 @@ class BaselineGAT(BaseGNNModel):
         self.nn1 = GATConv(num_node_features, hidden_dim, heads=heads)
         self.nn2 = GATConv(hidden_dim * heads, hidden_dim, heads=1)
         self.fc = nn.Linear(hidden_dim, self.num_classes)
+
+        # Metadata required for save method
+        self.num_node_features = num_node_features
+        self.hidden_dim = hidden_dim
+        self.heads = heads
+
+    def _get_metadata(self) -> dict:
+        """
+        Returns architecture metadata for saving/loading.
+        """
+        return {
+            'num_node_features': self.num_node_features,
+            'hidden_dim': self.hidden_dim,
+            'heads': self.heads
+        }
+
 
     def forward(self, data) -> ModelOutput:
         """
@@ -154,6 +183,18 @@ class BaselineGIN(BaseGNNModel):
         self.nn2 = GINConv(self.mlp2)
         self.fc = nn.Linear(hidden_dim, self.num_classes)
 
+        # Metadata required for save method
+        self.num_node_features = num_node_features
+        self.hidden_dim = hidden_dim
+
+    def _get_metadata(self) -> dict:
+        """
+        Returns architecture metadata for saving/loading.
+        """
+        return {
+            'num_node_features': self.num_node_features,
+            'hidden_dim': self.hidden_dim,
+        }
 
     def forward(self, data) -> ModelOutput:
         """

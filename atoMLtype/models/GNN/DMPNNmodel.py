@@ -124,6 +124,13 @@ class AtomBondMPNN(BaseGNNModel):
                  use_attention: bool = False):
         super().__init__(encoder)
 
+        # Metadata required for save method
+        self.atom_input_dim = atom_input_dim
+        self.bond_input_dim = bond_input_dim
+        self.num_layers = num_layers
+        self.hidden_dim = hidden_dim
+        self.use_attention = use_attention
+
         # Initial linear projection from raw atom features
         self.atom_encoder = nn.Linear(atom_input_dim, hidden_dim)
 
@@ -143,6 +150,18 @@ class AtomBondMPNN(BaseGNNModel):
             nn.ReLU(),
             nn.Linear(hidden_dim, self.num_classes)
         )
+    
+    def _get_metadata(self) -> dict:
+        """
+        Returns architecture metadata for saving/loading.
+        """
+        return {
+            'atom_input_dim': self.atom_input_dim,
+            'bond_input_dim': self.bond_input_dim,
+            'num_layers': self.num_layers,
+            'hidden_dim': self.hidden_dim,
+            'use_attention': self.use_attention
+        }
 
     def forward(self, data) -> ModelOutput:
         """

@@ -43,6 +43,9 @@ class GNNdataset(Dataset):
         self.log = get_logger(__name__)
         self.labelled_graphs = labeled
 
+        # Set the is filtered flag based on encoder passed to dataset
+        self.is_filtered = True if encoder and encoder.is_fitted else False
+
         # Load molecules and atom labels (if provided)
         self.sdf_dataset = SDFdataset(sdf_path, label_path)
 
@@ -55,10 +58,17 @@ class GNNdataset(Dataset):
             for label in labels
         ]
 
-        # Encode labels only if the dataset is labeled and labels are available
+        # Encode labels only if the dataset has labels and labelled graphs are desired
         if self.sdf_dataset.has_labels and self.labelled_graphs:
-            encoder.fit(self.raw_labels)
-            self.encoded_labels = encoder.transform(self.raw_labels)
+            if encoder is not None:
+                if not encoder.is_fitted:
+                    encoder.fit(self.raw_labels)
+                    self.log.info("Fitted encoder on dataset labels.")
+                    self.encoded_labels = encoder.transform(self.raw_labels)
+                else:
+                    self.log.info("Encoder already fitted; skipping re-fitting.")
+            else:
+                raise ValueError("Labeled dataset requires a provided ModelEncoder.")
         else:
             self.encoded_labels = None
 
@@ -66,6 +76,14 @@ class GNNdataset(Dataset):
         self.mols = self.sdf_dataset.get_molecules(labeled=labeled)
         self.mol_graphs = self._process_molecules(self.labelled_graphs, encoder)
 
+        # If encoder already fitted, filter mols, graphs, and labels
+        if self.labelled_graphs and self.is_filtered:
+            self.filtered_mols, self.filtered_mol_graphs = self.filter_to_encoder_labels(encoder)
+            self.filtered_raw_labels = [
+                atom.GetProp("atom_type") for mol in self.filtered_mols
+                for atom in mol.GetAtoms()
+            ]
+            self.filtered_encoded_labels = encoder.transform(self.raw_labels)
 
     def get_mol(self, idx: Union[int, str]) -> Chem.Mol:
         """
@@ -80,13 +98,15 @@ class GNNdataset(Dataset):
         Raises:
             ValueError: If no molecule with that name exists.
         """
+        target_list = self.filtered_mols if self.is_filtered else self.mols
+
         if isinstance(idx, str):
-            for mol in self.mols:
+            for mol in target_list:
                 if mol.HasProp("_Name") and mol.GetProp("_Name") == idx:
                     return mol
             raise ValueError(f"Molecule with name '{idx}' not found.")
         elif isinstance(idx, int):
-            return self.mols[idx]
+            return target_list[idx]
         else:
             raise TypeError("Index must be an integer or a string (_Name).")
         
@@ -100,15 +120,47 @@ class GNNdataset(Dataset):
         Returns:
             torch_geometric.data.Data: Corresponding graph.
         """
+        target_list = self.filtered_mol_graphs if self.is_filtered else self.mol_graphs
+
         if isinstance(idx, str):
-            for i, g in enumerate(self.mol_graphs):
+            for i, g in enumerate(target_list):
                 if hasattr(g, "mol_name") and g.mol_name == idx:
                     return g
             raise ValueError(f"Molecule with name '{idx}' not found in graphs.")
         elif isinstance(idx, int):
-            return self.mol_graphs[idx]
+            return target_list[idx]
         else:
             raise TypeError("Index must be int or str")
+        
+    def filter_to_encoder_labels(self, encoder: ModelEncoder):
+        """
+        Filters out molecules containing atom labels not present in the encoder.
+
+        Args:
+            encoder (ModelEncoder): Trained encoder whose classes define allowed labels.
+        """
+        
+        known_labels = set(encoder.classes)
+        filtered_mols = []
+        filtered_graphs = []
+
+        for mol, graph in zip(self.mols, self.mol_graphs):
+            atom_labels = [atom.GetProp("atom_type") for atom in mol.GetAtoms()]
+            if encoder.collapse:
+                atom_labels = [encoder.label_map.get(label, label) for label in atom_labels]
+
+            if all(label in known_labels for label in atom_labels):
+                filtered_mols.append(mol)
+                filtered_graphs.append(graph)
+            else:
+                mol_name = mol.GetProp("_Name")
+                self.log.warning(f"Skipping molecule '{mol_name}' due to unknown labels.")
+
+        removed = len(self.mols) - len(filtered_mols)
+        self.log.info(f"Filtered out {removed} molecules with unknown labels.")
+
+        return filtered_mols, filtered_graphs
+
 
 
     def _process_molecules(self, labeled: bool = True, encoder: ModelEncoder = None) -> List[Data]:
@@ -203,7 +255,7 @@ class GNNdataset(Dataset):
         Returns:
             int: Number of molecules.
         """
-        return len(self.mol_graphs)
+        return len(self.filtered_mol_graphs) if self.is_filtered else len(self.mol_graphs)
 
     def __getitem__(self, idx):
         """
@@ -215,4 +267,4 @@ class GNNdataset(Dataset):
         Returns:
             Data: PyTorch Geometric graph object.
         """
-        return self.mol_graphs[idx]
+        return self.filtered_mol_graphs[idx] if self.is_filtered else self.mol_graphs[idx]

@@ -1,3 +1,5 @@
+import torch
+import os
 import torch.nn as nn
 from abc import ABC, abstractmethod
 from atoMLtype.models.ModelOutput import ModelOutput
@@ -67,3 +69,52 @@ class BaseGNNModel(nn.Module, ABC):
                 - analysis (optional): intermediate outputs for visualization/debugging
         """
         pass
+
+    @abstractmethod
+    def _get_metadata(self) -> dict:
+        """
+        Returns architecture metadata needed to reconstruct the model.
+
+        Must be implemented by subclasses.
+
+        Returns:
+            dict: Dictionary of model arguments.
+        """
+        pass
+
+    def save(self, filepath: str):
+        """
+        Save model state_dict, encoder, and architecture metadata to file.
+        """
+        checkpoint = {
+            'model_state_dict': self.state_dict(),
+            'encoder': self.encoder,
+            'metadata': self._get_metadata()
+        }
+        torch.save(checkpoint, filepath)
+        print(f"Model + encoder + metadata saved to {filepath}")
+
+    @classmethod
+    def load(cls, filepath: str):
+        """
+        Load model, encoder, and architecture metadata from file.
+
+        Args:
+            filepath (str): Path to the saved checkpoint.
+
+        Returns:
+            model (cls): Reconstructed model with loaded weights and encoder.
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Checkpoint file {filepath} not found.")
+
+        checkpoint = torch.load(filepath, weights_only=False)
+        encoder = checkpoint['encoder']
+        metadata = checkpoint['metadata']
+
+        # Create the model using metadata
+        model = cls(encoder=encoder, **metadata)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Model + encoder loaded from {filepath} with metadata: {metadata}")
+
+        return model

@@ -1,67 +1,91 @@
 University of California Berkeley x BIOVIA  
-MSSE Capstone Project - Spring 2025  
-Authors: Brandon Robello, Jeremy Millford, Yara Khoury  
-Created: Wednesday April 9th 2025  
-Last Updated: Wednesday April 9th 2025  
+MSSE Capstone Project – Spring 2025  
+Authors: Yara Khoury, Brandon Robello, Jeremy Millford  
+Created: May 2025  
+Last Updated: May 2025  
 
-# Random Forest Module for Atom Type Classification
+# Random Forest Model for Atom Type Classification
 
-This module implements a Random Forest-based atom classification workflow. It provides a lightweight and interpretable machine learning alternative to GNN models by leveraging molecular featurization of individual atoms and their environments.  
+This module implements a classical machine learning pipeline for atom type prediction using a Random Forest classifier. It is designed as an interpretable and lightweight alternative to deep learning models, offering fast training and simple diagnostics using engineered atomic descriptors.
+
+---
 
 ## Module Contents
 
-| File | Description |
-|------|-------------|
-| `RFfeaturizer.py` | Extracts per-atom feature vectors from RDKit molecules using local and spatial descriptors. |
-| `RFmodel.py` | Defines a modular Random Forest classifier with training, prediction, and serialization utilities. |
+| File              | Description |
+|-------------------|-------------|
+| `RFfeaturizer.py` | Converts RDKit molecules into atom-level features using chemical and spatial descriptors. |
+| `RFmodel.py`      | Defines a modular Random Forest classifier with training, evaluation, prediction, and serialization capabilities. |
 
-## Feature Engineering
+---
 
-The `AtomFeaturizer_RF` class converts an RDKit molecule into a pandas `DataFrame` containing one row per atom. Features include:
+## Feature Engineering (`RFfeaturizer.py`)
 
-- Atomic number, formal charge, number of hydrogens
-- Aromaticity, hybridization, and degree
-- Spatial neighborhood descriptors:
-  - Distance to molecular center of mass
-  - Mean distance to 3 nearest atoms
-  - Closest neighbor distance
+The `AtomFeaturizer_RF` class extracts per-atom features from RDKit `Mol` objects and returns a structured `pandas.DataFrame`.
 
-Features can optionally be scaled using `StandardScaler`.
+### Extracted Features Include:
 
-## Model Description
+#### Local Atomic Properties:
+- Atomic number
+- Formal charge
+- Aromaticity
+- Hybridization
+- Degree
+- Number of hydrogens (explicit + implicit)
 
-The `RandomForestModel` class extends a custom `BaseModel` and includes:
+#### Spatial Descriptors:
+- Distance to molecular center of mass
+- Minimum distance to any neighboring atom
+- Mean distance to 3 nearest atoms
 
-- Automatic train/test splitting
-- Label encoding for atom type classes
-- Pickle-based model saving and loading
-- Built-in error handling and training safeguards
-- Returns decoded predictions as string labels
+### Options:
+- Feature scaling using `StandardScaler` (optional)
 
-The classifier is built using `sklearn.ensemble.RandomForestClassifier` with a default of 100 trees.
+---
 
-### Input Requirements
-- Molecule input must be an RDKit Mol object with 3D conformers.
+## Model Description (`RFmodel.py`)
 
-- Labels are expected as a list of atom-type strings (e.g., "C.3", "N.ar").
+The `RandomForestModel` class encapsulates:
+- `RandomForestClassifier` (from scikit-learn)
+- `LabelEncoder` for atom-type strings
 
-- Featurization and model training are compatible with pandas or NumPy formats.
+### Features:
+- `train(X, y)`: Encodes labels, fits the model
+- `predict(X)`: Returns predicted labels (decoded)
+- `predict_proba(X)`: Returns class probability distributions
+- `evaluate(X, y)`: Computes accuracy and prints a confusion matrix
+- `save(model_path)`: Pickles model and encoder to disk
+- `load(model_path)`: Loads previously trained model and label encoder
+- `get_feature_importance()`: Returns a dictionary of ranked feature importances
 
-### Dependencies
-- Python 3.x
+---
 
+## Input Requirements
+
+- Molecule input: RDKit `Mol` objects with valid 3D conformers
+- Atom labels: List of atom-type strings (e.g., `"C.3"`, `"N.ar"`)
+- Features and labels: `pandas.DataFrame` or NumPy arrays
+
+---
+
+## Dependencies
+
+- Python 3.8+
 - RDKit
-
+- NumPy
+- Pandas
 - scikit-learn
 
-- NumPy
+---
 
-- Pandas
+## Related Modules
 
-### Related Modules
-- atoMLtype/GNN: GNN-based atom typing framework
+| Module Path             | Purpose |
+|--------------------------|---------|
+| `atoMLtype/utils/`       | Provides shared dataset loaders and logging tools |
+| `atoMLtype/models/GNN/`  | Alternative GNN-based modeling pipeline |
+| `data/`                  | Stores `.sdf` and `.json` inputs used in training |
 
-- atoMLtype/utils: Core dataset utilities and shared featurization tools
+---
 
-- data/: SDF molecules and JSON labels used in training
-
+This Random Forest implementation provides a simple and interpretable baseline for atom typing performance benchmarking, feature ablation studies, and early-stage model development.

@@ -1,39 +1,57 @@
-# Biovia Functionality Tests
+University of California Berkeley x BIOVIA  
+MSSE Capstone Project – Spring 2025  
+Authors: Yara Khoury, Brandon Robello, Jeremy Millford  
+Created: May 2025  
+Last Updated: May 2025  
 
-This directory (`tests/`) contains automated unit tests for verifying the functionality of the GNN-based molecular property prediction pipeline.
+# Test Suite for GNN-Based Atom Typing Pipeline
 
-##  What This Tests
+This directory contains a comprehensive suite of automated tests designed to validate the functionality and robustness of the Graph Neural Network (GNN)-based molecular property prediction system developed for this capstone project.
 
-The test suite checks:
+## Purpose of the Test Suite
 
-- Correct loading and preprocessing of molecular data from `.sdf` and `.json` files.
-- Proper initialization and architecture of the GNN model (`AtomBondMPNN`).
-- Successful training and inference with `GNNTrainer` and `ModelEngine`.
-- Prediction performance and statistics (accuracy, confidence, label diversity).
-- Atom-level correctness for specific predictions.
+These tests are intended to ensure that all major components of the model pipeline behave as expected under a variety of conditions. 
+They cover:
 
-##  How to Run the Tests
+- Correct loading and preprocessing of molecular datasets (`.sdf`, `.json`)
+- Proper initialization of the `AtomBondMPNN` model architecture
+- Training execution via the `GNNTrainer` engine
+- Inference correctness and label prediction accuracy
+- Atom-level label mapping consistency
+- Diversity of predicted labels and confidence statistics
 
-All tests are containerized and executed using the script:
+Each test is structured to isolate potential points of failure in the pipeline and to ensure the integrity of both input processing and model outputs.
+
+## Running the Tests
+
+The test suite is containerized and designed to be run in a Linux-based environment using Docker. Follow the steps below to execute all tests:
 
 ```bash
 cd tests
-```
-
-```bash
 chmod +x ./build_and_test.sh
-````
-
-
-```bash
 ./build_and_test.sh
 ```
 
-(make sure you are in tests directory)
+Ensure you are located in the tests/ directory before executing the script.
 
-# Example output of test
+Prerequisites: 
+- Docker must be installed and running
 
-```
+- Python 3.11 or higher is used inside the container
+
+- All dependencies are pre-configured in the Docker environment
+
+## Test Script Details
+The script build_and_test.sh performs the following:
+
+1. Builds the Docker image for the testing environment.
+
+2. Mounts the codebase inside the container.
+
+3. Executes all test cases using pytest.
+
+## Sample Output
+```bash
 ============================= test session starts ==============================
 platform linux -- Python 3.11.12, pytest-7.4.0, pluggy-1.5.0 -- /usr/local/bin/python3.11
 cachedir: .pytest_cache
@@ -52,3 +70,14 @@ tests/test_functionality.py::test_multiple_atom_predictions PASSED       [100%]
 
 ============================== 8 passed in 43.81s ==============================
 ```
+
+## Notes
+- Tests are designed for modular execution and can be adapted to alternative models or datasets.
+
+- All statistical checks use reference metrics defined in utils/metrics.py.
+
+This test suite is a core component of the project's CI/validation framework and reflects the engineering discipline required for reproducible scientific software development.
+
+
+
+

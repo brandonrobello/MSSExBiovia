@@ -1,97 +1,87 @@
 University of California Berkeley x BIOVIA  
-MSSE Capstone Project - Spring 2025  
-Authors: Brandon Robello, Jeremy Millford, Yara Khoury  
-Created: Wednesday April 9th 2025  
-Last Updated: Wednesday April 9th 2025  
+MSSE Capstone Project – Spring 2025  
+Authors: Yara Khoury, Brandon Robello, Jeremy Millford  
+Created: May 2025  
+Last Updated: May 2025  
 
-# GNN Module for Atom Type Classification
+# GNN Models for Atom Type Classification
 
-This module implements a graph neural network (GNN) pipeline for atom typing using molecular structure data. It processes SDF-formatted molecules into graph representations, extracts chemically meaningful features, and applies GNN-based models to classify atom types at the node level.
+This module implements graph neural network (GNN) architectures for atom typing based on molecular graph representations. All models are built using PyTorch Geometric and support flexible configuration, training, and inference for per-atom classification tasks.
+
+---
 
 ## Module Contents
 
-| File | Description |
-|------|-------------|
-| `GNNdataset.py` | Loads molecular structures and labels, and converts them into PyTorch Geometric graph datasets. Includes support for 1-hop subgraph generation. |
-| `GNNfeaturizer.py` | Extracts atom and bond features using RDKit, supporting both standard and message-passing (D-MPNN-style) featurization. |
-| `GNNmodel.py` | Defines multiple GNN architectures including GCN, GAT, GIN, MPNN, and attention-based models. Includes a flexible training and evaluation framework. |
+| File                  | Description |
+|-----------------------|-------------|
+| `BaselineGNNs.py`     | Defines baseline GNN models: GCN, GAT, GIN with 2- and 4-layer variants. |
+| `DMPNNmodel.py`       | Implements an edge-aware Directed Message Passing Neural Network (D-MPNN) with optional attention. |
+| `MultilayerGNNs_TBD.py` | Experimental/placeholder script for future multi-layer GNN variants (work in progress). |
 
-## Functionality Overview
+---
 
-### Dataset and Featurization
+## Implemented Architectures
 
-- Molecules are loaded using a custom `SDFdataset` class and labeled with atom typing annotations.
-- Features are generated using `GraphFeaturizer` or `GraphFeaturizer_DMPNN`.
-- Each molecule is represented as a PyTorch Geometric `Data` object with:
-  - `x`: atom (node) features
-  - `edge_index`: connectivity (bonds)
-  - `edge_attr`: bond features
-  - `y`: per-atom classification labels
+### From `BaselineGNNs.py`
 
-### Subgraph Construction
+| Class          | Type | Description |
+|----------------|------|-------------|
+| `BaselineGCN`  | GCN  | Two-layer Graph Convolutional Network |
+| `GCN_4Layer`   | GCN  | Four-layer deep GCN |
+| `BaselineGAT`  | GAT  | Two-layer Graph Attention Network |
+| `GAT_4L`       | GAT  | Four-layer attention-based GNN |
+| `BaselineGIN`  | GIN  | Graph Isomorphism Network using MLP-based aggregators |
 
-- `GNNdataset_subgraphs` supports extraction of per-atom 1-hop subgraphs.
-- These subgraphs enable training models that focus on local chemical environments.
+### From `DMPNNmodel.py`
 
-## Model Architectures
+| Class              | Type     | Description |
+|--------------------|----------|-------------|
+| `Att_AtomBondMPNN` | D-MPNN   | Edge-aware, bond-directed message passing with optional attention weighting for atom typing |
 
-The module includes the following GNN variants:
+---
 
-| Model | Type | Description |
-|-------|------|-------------|
-| `BaselineGCN`, `GCN_4Layer` | GCN | Graph convolutional networks for node-level prediction |
-| `BaselineGAT`, `GAT_4L` | GAT | Attention-based networks that weigh neighbor contributions |
-| `BaselineGIN` | GIN | Graph isomorphism network using MLP-based aggregation |
-| `MPNN_4L` | MPNN | Message passing neural network with standard aggregation |
-| `Att_AtomBondMPNN` | Attention MPNN | Atom-bond message passing with attention-based edge weighting |
+## Model Input
 
-## Training and Evaluation
+All GNN models operate on `torch_geometric.data.Data` objects with the following fields:
 
-- The `GNNTrainer` class manages k-fold cross-validation, training, validation, and loss visualization.
-- Supports classification and regression tasks.
-- Evaluation includes accuracy, F1-score, and MSE (based on task).
+- `x`: Node (atom) features
+- `edge_index`: Graph connectivity
+- `edge_attr`: Bond (edge) features
+- `y`: Atom-type labels (per node)
 
-## Input Requirements
+---
 
-- `.sdf` file with molecular structures
-- `.json` file containing atom-level labels
+## Integration
 
-Set `collapse=True` to reduce fine-grained atom types into broader categories during label encoding.
+These models are called by the training engine defined in:
 
-### Dependencies
-- Python 3.x
+- `atoMLtype/models/ModelEngine.py`
+- `GNNTrainer` class
+- Dataset creation in `atoMLtype/datasets/GNNdataset.py`
 
-- RDKit
+Each model is compatible with label encoders and evaluation utilities provided in the broader project.
 
+---
+
+## Dependencies
+
+- Python 3.8+
 - PyTorch
-
 - PyTorch Geometric
+- RDKit
+- NumPy, Pandas
 
-- NumPy, Pandas, scikit-learn
+---
 
-- Matplotlib
+## Related Modules
 
-### Related Modules
-- atoMLtype/utils: Shared utilities for loading and labeling molecular data
+| Path                    | Purpose |
+|-------------------------|---------|
+| `datasets/GNNdataset.py`| Loads `.sdf` and `.json` inputs into GNN-compatible graphs |
+| `models/ModelEngine.py` | Unifies training and inference logic |
+| `utils/metrics.py`      | Accuracy, F1-score, confusion matrix, and other evaluators |
+| `analysis/`             | Interpretability tools including saliency and attention maps |
 
-- atoMLtype/RF: Random Forest-based atom typing implementation
+---
 
-- data/: Contains molecular datasets and reference label files
-
-## Example Usage
-
-```python
-from atoMLtype.GNN.GNNdataset import GNNdataset
-from atoMLtype.GNN.GNNmodel import BaselineGAT, GNNTrainer
-
-dataset = GNNdataset("data/parm_at_Frosst/zinc.sdf", "data/antechamber/atomLabels_gaff2.json")
-
-model = BaselineGAT(
-    num_node_features=dataset[0].x.shape[1],
-    num_atom_types=len(dataset.label_encoder.classes_)
-)
-
-trainer = GNNTrainer(model=model, dataset=dataset, epochs=20)
-trainer.train()
-
-
+This directory provides the core architectures for deep learning-based atom classification. The models are modular and designed for benchmarking, ablation, and extension to new GNN paradigms.

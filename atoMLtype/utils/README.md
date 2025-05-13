@@ -1,8 +1,8 @@
 University of California Berkeley x BIOVIA  
-MSSE Capstone Project - Spring 2025  
-Authors: Brandon Robello, Jeremy Millford, Yara Khoury  
-Created: Wednesday April 9th 2025  
-Last Updated: Wednesday April 9th 2025  
+MSSE Capstone Project – Spring 2025  
+Authors: Yara Khoury, Brandon Robello, Jeremy Millford  
+Created: May 2025  
+Last Updated: May 2025 
 
 # Utilities Module
 

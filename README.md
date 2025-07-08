@@ -90,6 +90,7 @@ conda activate atomtyping
 ### 2. Data Format
 
 Place your .sdf and .json files under a data/ directory. Ensure atom ordering matches between formats.
+The data used in this repo can be found [HERE](https://zenodo.org/records/15369157?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6IjVhMzg5MjIwLTdhZWYtNDNmYS05ODk5LWI0MTRmOGRhMDA0YiIsImRhdGEiOnt9LCJyYW5kb20iOiIyOWVjYzE5ZjgyMzMzZDVmZmRhZDU1NzMyYWZiZDJmNSJ9.M7mfNuaggBtV1sJGNTf6U4XRc4xWVO-UB6cXSt7vLxzlvAVKhWtmoHG_7FvSTFi2C-oPXnzNAxvsrFMjbYp_TA)
 
 ### 3. Train Models
 
